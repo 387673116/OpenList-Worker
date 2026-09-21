@@ -1,33 +1,33 @@
 // =============================================================================
-// OpenList-TSWorker · Cloudflare Workers 配置
-// 文档：https://developers.cloudflare.com/workers/wrangler/configuration/
+// OpenList-TSWorker Â· Cloudflare Workers éç½®
+// ææ¡£ï¼https://developers.cloudflare.com/workers/wrangler/configuration/
 //
-// ⚠️ 本文件只声明 KV 一个存储绑定（见文件末 kv_namespaces），D1 / DO 等
-//    其它存储请按需在控制台添加。
+// â ï¸ æ¬æä»¶åªå£°æ KV ä¸ä¸ªå­å¨ç»å®ï¼è§æä»¶æ« kv_namespacesï¼ï¼D1 / DO ç­
+//    å¶å®å­å¨è¯·æéå¨æ§å¶å°æ·»å ã
 //
-// 为什么声明 KV 且【省略 id 字段】（不能写 "id": ""）：
-//   wrangler 会自动预配（automatic provisioning）：首次部署创建
-//   "项目名-绑定名" 的命名空间（此处即 openlist-tsworkers-kv）并绑定；
-//   二次部署通过服务端 inherit 复用已有绑定，不会重复创建。
+// ä¸ºä»ä¹å£°æ KV ä¸ãçç¥ id å­æ®µãï¼ä¸è½å "id": ""ï¼ï¼
+//   wrangler ä¼èªå¨é¢éï¼automatic provisioningï¼ï¼é¦æ¬¡é¨ç½²åå»º
+//   "é¡¹ç®å-ç»å®å" çå½åç©ºé´ï¼æ­¤å¤å³ openlist-tsworkers-kvï¼å¹¶ç»å®ï¼
+//   äºæ¬¡é¨ç½²éè¿æå¡ç«¯ inherit å¤ç¨å·²æç»å®ï¼ä¸ä¼éå¤åå»ºã
 //
-// 注意：CI / 一键部署属非交互环境，wrangler 不会把生成的 id 回写进本文件。
-// 这是预期行为 —— 复用靠的是服务端 inherit 绑定，而非本地 id。
+// æ³¨æï¼CI / ä¸é®é¨ç½²å±éäº¤äºç¯å¢ï¼wrangler ä¸ä¼æçæç id ååè¿æ¬æä»¶ã
+// è¿æ¯é¢æè¡ä¸º ââ å¤ç¨é çæ¯æå¡ç«¯ inherit ç»å®ï¼èéæ¬å° idã
 //
-// ⚠️ 不要用 `wrangler kv namespace create` 手动建名为 "KV" 的命名空间：
-//   wrangler 的预配链路无法按 title 复用已有命名空间（KVHandler 未实现
-//   isConnectedToExistingResource），它会另建 openlist-tsworkers-kv，
-//   手动建的那个不会被任何绑定使用，成为孤儿资源。参见 Issue #34。
+// â ï¸ ä¸è¦ç¨ `wrangler kv namespace create` æå¨å»ºåä¸º "KV" çå½åç©ºé´ï¼
+//   wrangler çé¢éé¾è·¯æ æ³æ title å¤ç¨å·²æå½åç©ºé´ï¼KVHandler æªå®ç°
+//   isConnectedToExistingResourceï¼ï¼å®ä¼å¦å»º openlist-tsworkers-kvï¼
+//   æå¨å»ºçé£ä¸ªä¸ä¼è¢«ä»»ä½ç»å®ä½¿ç¨ï¼æä¸ºå­¤å¿èµæºãåè§ Issue #34ã
 //
-// Secret（JWT_SECRET / ADMIN_PASS / ALLOW_URLS / MYSQL_URLS / EO_KV_URLS / CF_* 等）请在
-// .dev.vars.example 或 .env.example 中声明 —— 部署按钮据此生成输入项，
-// 用户填入的值会成为该 Worker 的 Secret，后续更新不会被覆盖。
+// Secretï¼JWT_SECRET / ADMIN_PASS / ALLOW_URLS / MYSQL_URLS / EO_KV_URLS / CF_* ç­ï¼è¯·å¨
+// .dev.vars.example æ .env.example ä¸­å£°æ ââ é¨ç½²æé®æ®æ­¤çæè¾å¥é¡¹ï¼
+// ç¨æ·å¡«å¥çå¼ä¼æä¸ºè¯¥ Worker ç Secretï¼åç»­æ´æ°ä¸ä¼è¢«è¦çã
 // =============================================================================
 {
   "name": "openlist-tsworkers",
   "main": "src/backend/worker.ts",
   "compatibility_date": "2026-08-04",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": false,
+  "workers_dev": true,
   "preview_urls": false,
 
   "assets": {
@@ -36,79 +36,79 @@
   },
 
   // ===========================================================================
-  // 普通环境变量（非敏感）
-  // 注意：vars 会在每次 wrangler deploy 时被本文件覆盖（Secrets 不会）。
+  // æ®éç¯å¢åéï¼éææï¼
+  // æ³¨æï¼vars ä¼å¨æ¯æ¬¡ wrangler deploy æ¶è¢«æ¬æä»¶è¦çï¼Secrets ä¸ä¼ï¼ã
   // ===========================================================================
   "vars": {
     "ENVIRONMENT": "production",
 
-    // 数据存储格式：
-    //   map（默认）- 整对象序列化为单个 JSON 键值，适合 KV/Blob
-    //   key        - 分 key 存储，每实体一条记录（如 users_1）
-    //   sql        - 关系表格式，与 Go 后端一致（适用于 D1/MySQL）
+    // æ°æ®å­å¨æ ¼å¼ï¼
+    //   mapï¼é»è®¤ï¼- æ´å¯¹è±¡åºååä¸ºåä¸ª JSON é®å¼ï¼éå KV/Blob
+    //   key        - å key å­å¨ï¼æ¯å®ä½ä¸æ¡è®°å½ï¼å¦ users_1ï¼
+    //   sql        - å³ç³»è¡¨æ ¼å¼ï¼ä¸ Go åç«¯ä¸è´ï¼éç¨äº D1/MySQLï¼
     "DB_FORMAT": "map",
 
-    // 数据库驱动：
-    //   auto（默认）- 自动检测，顺序 mysql → d1 → kv → cfkv → blob → do
-    //   blob       - 腾讯云 EdgeOne Blob / 阿里云 ESA Blob
-    //   cfkv       - Cloudflare KV REST API（需 CF_ACCOUNT / CF_KV_UUID / CF_API_KEY）
-    //   kv         - Cloudflare KV binding（需下方 kv_namespaces）
-    //   d1         - Cloudflare D1（需下方 d1_databases）
-    //   do         - Cloudflare Durable Objects（需下方 durable_objects）
-    //   mysql      - 外部 MySQL（需 MYSQL_URLS 或 MYSQL_HOST 等，仅 Node 运行时）
-    // 说明：mysql 仅在配置了连接信息时才参与 auto 探测，避免无谓的 TCP 建连。
+    // æ°æ®åºé©±å¨ï¼
+    //   autoï¼é»è®¤ï¼- èªå¨æ£æµï¼é¡ºåº mysql â d1 â kv â cfkv â blob â do
+    //   blob       - è¾è®¯äº EdgeOne Blob / é¿éäº ESA Blob
+    //   cfkv       - Cloudflare KV REST APIï¼é CF_ACCOUNT / CF_KV_UUID / CF_API_KEYï¼
+    //   kv         - Cloudflare KV bindingï¼éä¸æ¹ kv_namespacesï¼
+    //   d1         - Cloudflare D1ï¼éä¸æ¹ d1_databasesï¼
+    //   do         - Cloudflare Durable Objectsï¼éä¸æ¹ durable_objectsï¼
+    //   mysql      - å¤é¨ MySQLï¼é MYSQL_URLS æ MYSQL_HOST ç­ï¼ä» Node è¿è¡æ¶ï¼
+    // è¯´æï¼mysql ä»å¨éç½®äºè¿æ¥ä¿¡æ¯æ¶æåä¸ auto æ¢æµï¼é¿åæ è°ç TCP å»ºè¿ã
     "DB_DRIVER": "auto",
 
-    // ── 安全鉴权（推荐以 Secret 类型配置，见 .dev.vars.example）──────────
+    // ââ å®å¨é´æï¼æ¨èä»¥ Secret ç±»åéç½®ï¼è§ .dev.vars.exampleï¼ââââââââââ
     //
-    // JWT 签名密钥（>=16 字符，兼作字段加密与定时任务鉴权）
+    // JWT ç­¾åå¯é¥ï¼>=16 å­ç¬¦ï¼å¼ä½å­æ®µå å¯ä¸å®æ¶ä»»å¡é´æï¼
     // "JWT_SECRET": "",
     //
-    // 跳过安装向导，自动以该密码初始化 admin
+    // è·³è¿å®è£åå¯¼ï¼èªå¨ä»¥è¯¥å¯ç åå§å admin
     // "ADMIN_PASS": "",
     //
-    // CORS 白名单（逗号分隔，不设则仅同源）
+    // CORS ç½ååï¼éå·åéï¼ä¸è®¾åä»åæºï¼
     // "ALLOW_URLS": "https://yourdomain.com",
 
-    // ── 可选参数 ──────────────────────────────────────────────────────────
+    // ââ å¯éåæ° ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
     //
-    // 单次整体上传（/put、/form）大小上限，单位字节。默认 26214400（25MB）
+    // åæ¬¡æ´ä½ä¸ä¼ ï¼/putã/formï¼å¤§å°ä¸éï¼åä½å­èãé»è®¤ 26214400ï¼25MBï¼
     // "MAX_UPLOAD": "26214400",
     //
-    // 分片上传单片大小上限，单位字节。默认 16777216（16MB）
+    // åçä¸ä¼ åçå¤§å°ä¸éï¼åä½å­èãé»è®¤ 16777216ï¼16MBï¼
     // "MAX_UPPART": "16777216",
     //
-    // 前端静态资源 CDN 地址，支持 $version 占位符
+    // åç«¯éæèµæº CDN å°åï¼æ¯æ $version å ä½ç¬¦
     // "ASSET_URLS": "https://example.com/dist",
     //
-    // 允许作为种子数据来源的主机白名单，逗号/空格分隔
+    // åè®¸ä½ä¸ºç§å­æ°æ®æ¥æºçä¸»æºç½ååï¼éå·/ç©ºæ ¼åé
     // "ALLOW_SEED": "",
 
-    // ── Cloudflare KV REST API（DB_DRIVER=cfkv 时三项需全部填写）───────────
+    // ââ Cloudflare KV REST APIï¼DB_DRIVER=cfkv æ¶ä¸é¡¹éå¨é¨å¡«åï¼âââââââââââ
     //
     // KV namespace ID
     // "CF_KV_UUID": "",
     //
-    // 账户 ID
+    // è´¦æ· ID
     // "CF_ACCOUNT": "",
     //
-    // 具有 KV 读写权限的 API Token
+    // å·æ KV è¯»åæéç API Token
     // "CF_API_KEY": "",
 
-    // ── EdgeOne Node 云函数 KV 代理（DB_DRIVER=kv 时可选）──────────────────
+    // ââ EdgeOne Node äºå½æ° KV ä»£çï¼DB_DRIVER=kv æ¶å¯éï¼ââââââââââââââââââ
     //
-    // EdgeOne 的 KV 绑定只注入 Edge Functions，不会注入 Node 云函数。
-    // 运行在 EdgeOne Node 云函数时，必须经同部署的 Edge Functions 代理访问 KV。
-    // 此处填部署 origin，如 https://your-project.edgeone.app
-    // 留空则自动使用当前请求 origin（同一部署自调用）；跨域或本地调试才需显式设置。
+    // EdgeOne ç KV ç»å®åªæ³¨å¥ Edge Functionsï¼ä¸ä¼æ³¨å¥ Node äºå½æ°ã
+    // è¿è¡å¨ EdgeOne Node äºå½æ°æ¶ï¼å¿é¡»ç»åé¨ç½²ç Edge Functions ä»£çè®¿é® KVã
+    // æ­¤å¤å¡«é¨ç½² originï¼å¦ https://your-project.edgeone.app
+    // çç©ºåèªå¨ä½¿ç¨å½åè¯·æ± originï¼åä¸é¨ç½²èªè°ç¨ï¼ï¼è·¨åææ¬å°è°è¯æéæ¾å¼è®¾ç½®ã
     // "EO_KV_URLS": "",
 
-    // ── MySQL（DB_DRIVER=mysql 时，方式一 / 方式二 二选一）─────────────────
+    // ââ MySQLï¼DB_DRIVER=mysql æ¶ï¼æ¹å¼ä¸ / æ¹å¼äº äºéä¸ï¼âââââââââââââââââ
     //
-    // 方式一：连接串
+    // æ¹å¼ä¸ï¼è¿æ¥ä¸²
     // "MYSQL_URLS": "mysql://user:pass@host:3306/db",
     //
-    // 方式二：分项配置
+    // æ¹å¼äºï¼åé¡¹éç½®
     // "MYSQL_HOST": "127.0.0.1",
     // "MYSQL_PORT": "3306",
     // "MYSQL_USER": "root",
@@ -117,28 +117,28 @@
   },
 
   // ===========================================================================
-  // 存储绑定
+  // å­å¨ç»å®
   // ===========================================================================
   //
-  // ▶ 方案 A：KV（默认启用，免费额度大、最通用）
-  //   ⚠️ 必须【完全省略 id 字段】，不能写成 "id": ""：
-  //      wrangler 配置校验会拒绝空字符串 id（"should have a string id field"）。
-  //   省略 id 后：首次部署由 wrangler 自动创建 openlist-tsworkers-kv 并绑定；
-  //   二次部署通过 inherit 复用已有绑定，不会重复创建。
-  //   若想改用账户里已有的 KV，把该命名空间的 id 填进来即可。
+  // â¶ æ¹æ¡ Aï¼KVï¼é»è®¤å¯ç¨ï¼åè´¹é¢åº¦å¤§ãæéç¨ï¼
+  //   â ï¸ å¿é¡»ãå®å¨çç¥ id å­æ®µãï¼ä¸è½åæ "id": ""ï¼
+  //      wrangler éç½®æ ¡éªä¼æç»ç©ºå­ç¬¦ä¸² idï¼"should have a string id field"ï¼ã
+  //   çç¥ id åï¼é¦æ¬¡é¨ç½²ç± wrangler èªå¨åå»º openlist-tsworkers-kv å¹¶ç»å®ï¼
+  //   äºæ¬¡é¨ç½²éè¿ inherit å¤ç¨å·²æç»å®ï¼ä¸ä¼éå¤åå»ºã
+  //   è¥æ³æ¹ç¨è´¦æ·éå·²æç KVï¼æè¯¥å½åç©ºé´ç id å¡«è¿æ¥å³å¯ã
   //
   "kv_namespaces": [{ "binding": "KV" }],
   //
-  // ▶ 方案 B：D1（关系型，可与 Go 后端共享库；DB_FORMAT 建议改为 "sql"）
-  //   控制台：Workers & Pages → D1 → 创建数据库 → 绑定到 Worker，变量名填 DB
-  //   省略 database_id 时，wrangler >= 4.45.0 会自动创建同名库并回写
+  // â¶ æ¹æ¡ Bï¼D1ï¼å³ç³»åï¼å¯ä¸ Go åç«¯å±äº«åºï¼DB_FORMAT å»ºè®®æ¹ä¸º "sql"ï¼
+  //   æ§å¶å°ï¼Workers & Pages â D1 â åå»ºæ°æ®åº â ç»å®å° Workerï¼åéåå¡« DB
+  //   çç¥ database_id æ¶ï¼wrangler >= 4.45.0 ä¼èªå¨åå»ºåååºå¹¶åå
   //
   // "d1_databases": [
   //   { "binding": "DB", "database_name": "openlist", "database_id": "" }
   // ],
   //
-  // ▶ 方案 C：Durable Objects（内置 SQLite，强一致；DB_FORMAT 建议改为 "sql"）
-  //   注意：DO 需要 migrations，且删除成本高，适合单租户部署。
+  // â¶ æ¹æ¡ Cï¼Durable Objectsï¼åç½® SQLiteï¼å¼ºä¸è´ï¼DB_FORMAT å»ºè®®æ¹ä¸º "sql"ï¼
+  //   æ³¨æï¼DO éè¦ migrationsï¼ä¸å é¤ææ¬é«ï¼éååç§æ·é¨ç½²ã
   //
   // "durable_objects": {
   //   "bindings": [{ "name": "DO", "class_name": "OpenListDB" }]
@@ -147,7 +147,7 @@
   //   { "tag": "v1", "new_sqlite_classes": ["OpenListDB"] }
   // ],
   //
-  // ▶ 方案 D：Blob / MySQL
-  //   Blob 由 EdgeOne / ESA 自动注入，无需配置；
-  //   MySQL 通过 Secret 配置 MYSQL_URLS（或 MYSQL_HOST 等分项）。
+  // â¶ æ¹æ¡ Dï¼Blob / MySQL
+  //   Blob ç± EdgeOne / ESA èªå¨æ³¨å¥ï¼æ ééç½®ï¼
+  //   MySQL éè¿ Secret éç½® MYSQL_URLSï¼æ MYSQL_HOST ç­åé¡¹ï¼ã
 }
