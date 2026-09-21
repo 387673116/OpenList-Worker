@@ -16,11 +16,11 @@ import { getSettings, resolvePath } from "../internal/model/db"
 import { canUseProxyEndpoint, normalizeExtList } from "../internal/driver/proxy"
 
 /**
- * WebDAV 协议服务（挂载于 /dav/*）。
+ * WebDAV åè®®æå¡ï¼æè½½äº /dav/*ï¼ã
  *
- * 认证：Basic Auth（用户名/密码）或 Bearer token（全局 token）。
- * 权限：WEBDAV_READ（读/列目录）与 WEBDAV_MANAGE（写/删/移动/复制）按位校验。
- * 支持方法：OPTIONS / PROPFIND / GET / HEAD / PUT / MKCOL / DELETE / MOVE / COPY。
+ * è®¤è¯ï¼Basic Authï¼ç¨æ·å/å¯ç ï¼æ Bearer tokenï¼å¨å± tokenï¼ã
+ * æéï¼WEBDAV_READï¼è¯»/åç®å½ï¼ä¸ WEBDAV_MANAGEï¼å/å /ç§»å¨/å¤å¶ï¼æä½æ ¡éªã
+ * æ¯ææ¹æ³ï¼OPTIONS / PROPFIND / GET / HEAD / PUT / MKCOL / DELETE / MOVE / COPYã
  */
 
 export const webdavRouter = new Hono()
@@ -33,14 +33,14 @@ const getStorageRequestContext = (c: any) => {
     }
     return {
       waitUntil: (p: Promise<unknown>) => executionCtx.waitUntil(p),
-      env: c.env, // 传递 env 用于请求级 KV 缓存复用
+      env: c.env, // ä¼ é env ç¨äºè¯·æ±çº§ KV ç¼å­å¤ç¨
     }
   } catch {
     return undefined
   }
 }
 
-/** Basic Auth 或 Bearer token 认证，返回用户对象（未认证返回 null） */
+/** Basic Auth æ Bearer token è®¤è¯ï¼è¿åç¨æ·å¯¹è±¡ï¼æªè®¤è¯è¿å nullï¼ */
 async function webdavAuth(c: any): Promise<any> {
   const authHeader = c.req.header("Authorization") || ""
   if (authHeader.startsWith("Basic ")) {
@@ -55,7 +55,7 @@ async function webdavAuth(c: any): Promise<any> {
         (u: any) => u.username === username && !u.disabled,
       )
       if (!user) return null
-      // 空密码用户（guest）：Basic Auth 下若未提供密码则允许（与 AList 一致）
+      // ç©ºå¯ç ç¨æ·ï¼guestï¼ï¼Basic Auth ä¸è¥æªæä¾å¯ç ååè®¸ï¼ä¸ AList ä¸è´ï¼
       if (!user.password) {
         return password === "" ? user : null
       }
@@ -72,19 +72,19 @@ async function webdavAuth(c: any): Promise<any> {
   return null
 }
 
-/** 从 URL pathname 中剥离 /dav 前缀，得到虚拟文件路径 */
+/** ä» URL pathname ä¸­å¥ç¦» /dav åç¼ï¼å¾å°èææä»¶è·¯å¾ */
 function davPathOf(c: any): string {
   const pathname = new URL(c.req.url).pathname
   let p = pathname.replace(/^\/dav/, "")
   if (!p) p = "/"
   try {
-    return decodeURIComponent(p)
+    return decodeDavPathSegment(p)
   } catch {
     return p
   }
 }
 
-/** 拆分虚拟路径为 { dir, name } */
+/** æåèæè·¯å¾ä¸º { dir, name } */
 function splitPath(p: string): { dir: string; name: string } {
   const clean = p.startsWith("/") ? p : "/" + p
   const parts = clean.split("/").filter(Boolean)
@@ -135,9 +135,7 @@ webdavRouter.all("/*", async (c) => {
         const href =
           davPath === "/"
             ? "/"
-            : davPath.endsWith("/")
-              ? davPath
-              : davPath + "/"
+            : encodeURI(davPath.endsWith("/") ? davPath : davPath + "/")
         const xml = buildWebDavPropfindResponse(href, items)
         return c.body(xml, depth === "0" ? 207 : 207, {
           "Content-Type": "application/xml; charset=utf-8",
@@ -150,13 +148,13 @@ webdavRouter.all("/*", async (c) => {
         const { item, rawUrl } = await getItem(davPath, ctx)
         if (!item) return c.text("Not found", 404)
         if (item.is_dir) return c.text("Is a directory", 400)
-        // 重定向到 rawRouter 实际下载；rawRouter 已处理所有驱动的下载协议
-        // （proxy/redirect/stream + Range + SSRF 防护）。
+        // éå®åå° rawRouter å®éä¸è½½ï¼rawRouter å·²å¤çææé©±å¨çä¸è½½åè®®
+        // ï¼proxy/redirect/stream + Range + SSRF é²æ¤ï¼ã
         //
-        // 走 /p 还是 /d 取决于存储的代理策略：/p 是受限的公开代理端点
-        // （对齐 Go handles.canProxy()，未开启代理的存储会 403），而 WebDAV 协议
-        // 拉流必须能拿到字节——不能拿直链的存储（如 WebDav 自身）才需要 /p。
-        // 因此这里按同一个判据选择端点，避免 WebDAV 客户端读到 403。
+        // èµ° /p è¿æ¯ /d åå³äºå­å¨çä»£çç­ç¥ï¼/p æ¯åéçå¬å¼ä»£çç«¯ç¹
+        // ï¼å¯¹é½ Go handles.canProxy()ï¼æªå¼å¯ä»£ççå­å¨ä¼ 403ï¼ï¼è WebDAV åè®®
+        // ææµå¿é¡»è½æ¿å°å­èââä¸è½æ¿ç´é¾çå­å¨ï¼å¦ WebDav èªèº«ï¼æéè¦ /pã
+        // å æ­¤è¿éæåä¸ä¸ªå¤æ®éæ©ç«¯ç¹ï¼é¿å WebDAV å®¢æ·ç«¯è¯»å° 403ã
         let prefix = "/api/p"
         try {
           const resolved: any = await resolvePath(davPath)
@@ -175,7 +173,7 @@ webdavRouter.all("/*", async (c) => {
             if (!allowProxy) prefix = "/api/d"
           }
         } catch {
-          // 解析失败时保持默认 /p，交由 rawRouter 给出最终结论
+          // è§£æå¤±è´¥æ¶ä¿æé»è®¤ /pï¼äº¤ç± rawRouter ç»åºæç»ç»è®º
         }
         return c.redirect(
           rawUrl || `${prefix}${davPath.startsWith("/") ? "" : "/"}${davPath}`,
@@ -235,7 +233,7 @@ webdavRouter.all("/*", async (c) => {
 
       case "LOCK":
       case "UNLOCK":
-        // 简化实现：声明不支持锁，客户端通常可继续无锁操作
+        // ç®åå®ç°ï¼å£°æä¸æ¯æéï¼å®¢æ·ç«¯éå¸¸å¯ç»§ç»­æ éæä½
         return c.text("Locking not supported", 405)
 
       default:
@@ -248,4 +246,46 @@ webdavRouter.all("/*", async (c) => {
     }
     return c.text(msg, 500)
   }
-})
+})/**
+ * GBK fallback decode: fix silent fallback when non-UTF-8 clients
+ * (some iOS/Windows apps) send GBK percent-encoded Chinese paths.
+ *
+ * decodeURIComponent throws URIError on non-UTF-8 sequences (e.g. %d1%a7).
+ * The old implementation returned the raw percent string, path resolution
+ * then fell back to the mount root, which clients see as
+ * "failed to load second-level directories". This fix rebuilds the byte
+ * sequence and decodes it as GBK; it only activates when UTF-8 decoding
+ * fails, so well-formed UTF-8 paths are unaffected.
+ */
+function decodeDavPathSegment(p: string): string {
+  try {
+    return decodeURIComponent(p)
+  } catch {
+    try {
+      const bytes: number[] = []
+      let i = 0
+      while (i < p.length) {
+        if (p[i] === "%" && i + 3 <= p.length) {
+          const hex = p.slice(i + 1, i + 3)
+          if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+            bytes.push(parseInt(hex, 16))
+            i += 3
+            continue
+          }
+        }
+        const code = p.charCodeAt(i)
+        if (code < 128) bytes.push(code)
+        else {
+          const enc = encodeURIComponent(p[i])
+          bytes.push(parseInt(enc.slice(1, 3), 16))
+        }
+        i += 1
+      }
+      return new TextDecoder("gbk").decode(new Uint8Array(bytes))
+    } catch {
+      return p
+    }
+  }
+}
+
+
